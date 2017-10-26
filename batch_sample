@@ -1,0 +1,263 @@
+@echo off
+SETLOCAL ENABLEDELAYEDEXPANSION
+@cls
+:START
+cd %HOMEPATH%
+
+color 02
+
+rem %COMPUTERNAME%
+SET room=1
+for /F "delims=" %%a in ('HOSTNAME') do @set mypcname=%%a
+
+IF /I "%mypcname%" GEQ "YMMTA1063" SET room=2
+
+:
+SET PCList=tm%room%pcname.txt
+if not exist "%PCList%" echo Hi, we need %PCList% to run this script&PAUSE
+
+
+:TODO
+
+:check YMMTAFA03 network connection
+net use | find /i "YMMTAFS03" > netstat.dat
+for /f %%y in (netstat.dat) do @set netstat=%%y
+IF /I "%netstat%" NEQ "OK" @echo Please check network connection on YMMTAFS03&PAUSE
+
+:check & compare wrd file
+SET fileAmount=0
+rem loop thought FTV 1 2 3 4
+for  %%c in (1 2 3 4) do (
+	SET LocalPath=D:\Share\FTAS\Param\MRJ#%%cTlm\wrd\MRJ-*.wrd
+	SET SeverPath=\\ymmtafs03\mitac_raw_dataus01\Param\MRJ#%%cTlm\wrd\MRJ-*.wrd
+	
+	echo %%c	FTV%%c Current wrd file:
+	rem check if this is multi wrd file exist in server03 path, (TODO)
+	for  %%a in ("!SeverPath!") do (
+		set FileName=%%~na
+		rem assign local file name, it is not check the unique present(TODO),  
+		for  %%f in ("!LocalPath!") do set localFileName=%%~nf
+	     
+	     echo    MRJ#%%cTlm\wrd\!FileName!.wrd
+		 if !FileName! NEQ !localFileName! (
+			echo  Local 		!localFileName!
+			color 06
+			echo ------found different wrd file!
+			set /A fileAmount = !fileAmount!+1 
+		)
+		
+		  rem echo Total files is !fileAmount!
+	)
+	rem echo --!LocalPath!--
+)
+
+
+
+if !fileAmount! NEQ 0 echo you can copy all the new wrd file
+
+
+REM end of todo list
+
+
+
+:MAINMENU
+
+@set VerifyInput=FALSE
+@set AC=0
+
+
+ECHO ............................................
+ECHO Choose which aircraft will be worked on:
+ECHO 1 - MRJ#1
+ECHO 2 - MRJ#2
+ECHO 3 - MRJ#3
+ECHO 4 - MRJ#4 
+ECHO 5- Back to Main Menu
+
+ECHO.
+SET /p AC=Type 1, 2, 3 or 4 then press ENTER:
+
+REM otherwise back to start(or end?)
+
+if %AC%==9 goto ALLWORKS
+if %AC%==5 goto MAINMENU
+
+FOR %%P IN (1 2 3 4) DO IF %%P EQU %AC% @set VerifyInput=TRUE
+
+
+IF /I %VerifyInput% NEQ TRUE (
+
+	echo FTV:%AC% has been selected
+	goto MAINMENU
+)
+
+
+
+
+:EXETYPE
+@set VerifyInput=FALSE
+
+ECHO .............................................
+ECHO PRESS W or Z to select which file you want 
+ECHO .............................................
+ECHO Choose which file:
+ECHO w - WRD file
+ECHO z - ZCP file
+
+ECHO.
+SET /p JOBTYPE=Type W or Z then press ENTER:
+
+FOR %%P IN (w z) DO IF %%P EQU %JOBTYPE% @set VerifyInput=TRUE
+
+IF /I %VerifyInput% NEQ TRUE (
+	goto EXETYPE
+)
+
+
+
+REM start do the work
+
+: This extra IF block is necessary, otherwise set statement will get delay
+IF /I %JOBTYPE% EQU z (
+	color 02
+	IF %AC% EQU 3 (
+		ECHO Are you sure FTV3 need ZCP file? 
+		SET /p action=I am confused.....&``!@^ have to quit:
+		@EXIT /B 3
+	)	
+	IF %AC% EQU 4 (
+		ECHO Are you sure FTV4 need ZCP file?
+		SET /p action=I am confused.....&^&^ have to quit:
+		@EXIT /B 4
+	)	
+	
+	SET LocalPath=D:\Share\FTAS\Param\MRJ#%AC%Tlm\zcp\str_*.zcp
+	SET SharePath=Share\FTAS\Param\MRJ#%AC%Tlm\zcp\str_*.zcp
+	SET BackupPath=Share\FTAS\Param\MRJ#%AC%Tlm\zcp\old
+	SET WorkPath=Share\FTAS\Param\MRJ#%AC%Tlm\zcp
+)
+
+
+	
+IF /I %JOBTYPE% EQU z (	
+	echo Switch job to ZCP push %LocalPath%
+	if not exist "D:\%BackupPath%" mkdir "D:\%BackupPath%"
+	
+	move /Y "%LocalPath%"  "D:\%BackupPath%"
+	copy /V "\\ymmtafs03\mitac_raw_dataus01\Param\MRJ#%AC%Tlm\zcp\str_*.zcp" "D:\Share\FTAS\Param\MRJ#%AC%Tlm\zcp"
+
+	goto WORKING
+)
+
+IF /I %JOBTYPE% EQU w (
+
+	SET SharePath=Share\FTAS\Param\MRJ#%AC%Tlm\wrd\MRJ-*.wrd
+	SET BackupPath=Share\FTAS\Param\MRJ#%AC%Tlm\wrd\old
+	SET LocalPath=D:\Share\FTAS\Param\MRJ#%AC%Tlm\wrd\MRJ-*.wrd 
+	SET WorkPath=Share\FTAS\Param\MRJ#%AC%Tlm\wrd
+)
+IF /I %JOBTYPE% EQU w (
+	echo Switch job to Wrd file copy 
+	
+	if not exist "D:\%BackupPath%" mkdir "D:\%BackupPath%"
+	move /Y %LocalPath% "D:\%BackupPath%"
+	copy /V "\\ymmtafs03\mitac_raw_dataus01\Param\MRJ#%AC%Tlm\wrd\MRJ-*.wrd" "D:\Share\FTAS\Param\MRJ#%AC%Tlm\wrd"
+
+	goto WORKING
+
+)
+
+REM do the real copy
+:WORKING
+color 02
+
+echo LocalPath=  %LocalPath%
+echo ________________________________________________________________
+echo This is TM room %ROOM%, operate %JOBTYPE% from %mypcname%, using %PCList%
+
+
+for /F "eol=; tokens=1 delims=," %%i in (%PCList%) do (
+	@echo -----%%i------
+	if not exist "\\%%i\%BackupPath%" mkdir "\\%%i\%BackupPath%"
+	if %%i NEQ %mypcname% (
+		@move /Y \\%%i\%SharePath% \\%%i\%BackupPath% 2>&1 1>null || echo %ERRORLEVEL% "can't Move \\%%i\%SharePath% to \\%%i\%BackupPath%"
+		@copy /V %LocalPath% \\%%i\%WorkPath% 2>&1 1>null 
+		rem || echo %ERRORLEVEL% "can't copy %LocalPath% to \\%%i\%WorkPath% "
+		rem echo !ERRORLEVEL!
+					if /I !ERRORLEVEL! NEQ 0 (
+						color 04
+						echo %ERRORLEVEL% can't copy !LocalPath! to \\%%i\!WorkPath!
+						echo plese check if copy or move has problem
+					)
+				) else (
+					echo ----Ignore local computer %mypcname%.
+				)
+	)
+)
+
+
+
+PAUSE
+goto END
+
+:ALLWORKS
+color 02
+echo ==========Copy multi wrd files============
+for  %%c in (1 2 3 4) do (
+	SET SharePath=Share\FTAS\Param\MRJ#%%cTlm\wrd\MRJ-*.wrd
+	SET BackupPath=Share\FTAS\Param\MRJ#%%cTlm\wrd\old
+	SET LocalPath=D:\Share\FTAS\Param\MRJ#%%cTlm\wrd\MRJ-*.wrd 
+	SET WorkPath=Share\FTAS\Param\MRJ#%%cTlm\wrd
+	
+	SET SeverPath=\\ymmtafs03\mitac_raw_dataus01\Param\MRJ#%%cTlm\wrd\MRJ-*.wrd
+	
+	for  %%a in ("!SeverPath!") do (
+		set FileName=%%~na
+		for  %%f in ("!LocalPath!") do set localFileName=%%~nf
+		 set FileName=%%~na
+		 
+		 if !FileName! NEQ !localFileName! (
+			echo   Copy MRJ#%%cTlm\wrd\!FileName!.wrd
+REM do the realy copy
+rem echo backup path !BackupPath!
+			if not exist "D:\!BackupPath!" mkdir "D:\!BackupPath!"
+			move /Y !LocalPath! D:\!BackupPath!
+			copy /V "\\ymmtafs03\mitac_raw_dataus01\Param\MRJ#%%cTlm\wrd\MRJ-*.wrd" "D:\Share\FTAS\Param\MRJ#%%cTlm\wrd"
+			
+			color 02
+			for /F "eol=; tokens=1 delims=," %%i in (%PCList%) do (
+				
+				
+				if not exist "\\%%i\!BackupPath!" mkdir "\\%%i\!BackupPath!"
+				if %%i NEQ %mypcname% (
+					@echo  -----%%i------
+					move /Y \\%%i\!SharePath! \\%%i\!BackupPath! 2>&1 1>null || echo %ERRORLEVEL% "can't Move \\%%i\!SharePath! to \\%%i\!BackupPath!"
+					@copy /V !LocalPath! \\%%i\!WorkPath! 2>&1 1>null
+					rem echo !ERRORLEVEL!
+					if /I !ERRORLEVEL! NEQ 0 (
+						color 04
+						echo %ERRORLEVEL% can't copy !LocalPath! to \\%%i\!WorkPath!
+						echo plese check if copy or move has problem
+					)
+				) else (
+					echo ----Ignore local computer %mypcname%.
+				)
+			rem end of for /F "eol=; tokens=1 delims=," %%i in (%PCList%) do
+			)
+				
+			
+		rem end of if !FileName! NEQ !localFileName! 
+		)
+	rem end of 	for  %%a in ("!SeverPath!") do
+	)	
+rem end of for  %%c in (1 2 3 4) do 
+) 
+
+goto END
+
+
+:END
+
+ENDLOCAL
+@echo on
+@EXIT /B 0
